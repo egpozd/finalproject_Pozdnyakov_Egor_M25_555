@@ -2,7 +2,7 @@ install:
 	poetry install
 
 project:
-	poetry run python -c "from wallet import main; main()"
+	poetry run python main.py
 
 build:
 	poetry build
@@ -15,3 +15,6 @@ package-install:
 
 lint:
 	poetry run ruff check .
+
+format:
+	poetry run ruff format .

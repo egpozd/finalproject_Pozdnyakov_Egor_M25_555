@@ -1,28 +1,25 @@
 [tool.poetry]
 name = "finalproject-pozdnyakov-egor-m25-555"
 version = "0.1.0"
-description = ""
-authors = ["egpozd <g17or@yandex.ru>"]
+description = "Currency wallet console application"
+authors = ["Egor Pozdnyakov <your-email@example.com>"]
 readme = "README.md"
-packages = [
-    { include = "*.py" }
-]
-
+packages = [{include = "valutatrade_hub"}]
 
 [tool.poetry.dependencies]
-python = "^3.12"
-prettytable = "^3.16.0"
-
+python = "^3.8"
+prettytable = "^3.9.0"
 
 [tool.poetry.group.dev.dependencies]
-ruff = "^0.14.3"
+ruff = "^0.1.0"
+
+[tool.poetry.scripts]
+wallet = "main:main"
 
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
-
-[tool.poetry.scripts]
-wallet = "wallet:main"
-
-
+[tool.ruff]
+line-length = 88
+target-version = "py38"
