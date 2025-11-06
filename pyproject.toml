@@ -1,0 +1,28 @@
+[tool.poetry]
+name = "finalproject-pozdnyakov-egor-m25-555"
+version = "0.1.0"
+description = ""
+authors = ["egpozd <g17or@yandex.ru>"]
+readme = "README.md"
+packages = [
+    { include = "*.py" }
+]
+
+
+[tool.poetry.dependencies]
+python = "^3.12"
+prettytable = "^3.16.0"
+
+
+[tool.poetry.group.dev.dependencies]
+ruff = "^0.14.3"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+
+[tool.poetry.scripts]
+wallet = "wallet:main"
+
+
