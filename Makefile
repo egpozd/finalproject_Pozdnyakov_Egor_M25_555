@@ -18,3 +18,10 @@ lint:
 
 format:
 	poetry run ruff format .
+
+test:
+	poetry run python -m pytest tests/ -v
+
+clean:
+	rm -rf dist/ build/ *.egg-info/ .ruff_cache/ __pycache__/ valutatrade_hub/__pycache__/ valutatrade_hub/*/__pycache__/
+	

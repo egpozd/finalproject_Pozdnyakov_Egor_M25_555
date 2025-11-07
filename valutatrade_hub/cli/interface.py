@@ -3,6 +3,8 @@ from prettytable import PrettyTable
 from valutatrade_hub.core.usecases import user_manager, portfolio_manager
 from valutatrade_hub.parser_service.updater import RatesUpdater
 from valutatrade_hub.parser_service.storage import storage
+from valutatrade_hub.core.exchange_rates import ExchangeRateService
+from valutatrade_hub.core.exceptions import CurrencyNotFoundError
 
 
 def main():
@@ -18,6 +20,9 @@ def main():
     login_parser = subparsers.add_parser('login', help='Login user')
     login_parser.add_argument('--username', required=True, help='Username')
     login_parser.add_argument('--password', required=True, help='Password')
+
+    # logout command
+    subparsers.add_parser('logout', help='Logout user')
 
     # show-portfolio command
     portfolio_parser = subparsers.add_parser('show-portfolio', help='Show user portfolio')
@@ -60,6 +65,8 @@ def main():
             register_user(args.username, args.password)
         elif args.command == 'login':
             login_user(args.username, args.password)
+        elif args.command == 'logout':
+            logout_user()
         elif args.command == 'show-portfolio':
             show_portfolio(args.base)
         elif args.command == 'buy':
@@ -78,8 +85,8 @@ def main():
 
 def register_user(username: str, password: str):
     """Регистрация нового пользователя"""
-    user_id = user_manager.register_user(username, password).user_id
-    print(f"Пользователь '{username}' зарегистрирован (id={user_id}). "
+    user = user_manager.register_user(username, password)
+    print(f"Пользователь '{username}' зарегистрирован (id={user.user_id}). "
           f"Войдите: login --username {username} --password ****")
 
 
@@ -89,8 +96,14 @@ def login_user(username: str, password: str):
     print(f"Вы вошли как '{username}'")
 
 
+def logout_user():
+    """Выход пользователя"""
+    user_manager.logout()
+    print("Вы вышли из системы")
+
+
 def show_portfolio(base_currency: str):
-    """Показать портфель пользователя"""
+    """Показать портфель пользователя с реальными курсами"""
     if not user_manager.current_user:
         print("Сначала выполните login")
         return
@@ -103,101 +116,113 @@ def show_portfolio(base_currency: str):
 
     print(f"Портфель пользователя '{user_manager.current_user.username}' (база: {base_currency}):")
     
-    total_value = 0
+    total_value = 0.0
+    rates_used = {}
+    
     for currency, wallet in portfolio.wallets.items():
-        # Временный расчет стоимости (будет заменен на реальные курсы)
-        if currency == base_currency:
-            value = wallet.balance
-        else:
-            # Заглушка для демонстрации
-            exchange_rates = {
-                'BTC_USD': 59337.21,
-                'EUR_USD': 1.0786,
-                'USD_USD': 1.0,
-            }
-            rate_key = f"{currency}_{base_currency}"
-            value = wallet.balance * exchange_rates.get(rate_key, 1.0)
-        
-        total_value += value
-        print(f"- {currency}: {wallet.balance:.2f} → {value:.2f} {base_currency}")
+        try:
+            if currency == base_currency:
+                value = wallet.balance
+                rate = 1.0
+            else:
+                rate = ExchangeRateService.get_rate(currency, base_currency)
+                value = wallet.balance * rate
+                rates_used[f"{currency}_{base_currency}"] = rate
+                
+            total_value += value
+            print(f"- {currency}: {wallet.balance:.4f} → {value:.2f} {base_currency} (курс: {rate:.4f})")
+            
+        except CurrencyNotFoundError:
+            print(f"- {currency}: {wallet.balance:.4f} → [КУРС НЕДОСТУПЕН]")
     
     print("---------------------------------")
     print(f"ИТОГО: {total_value:,.2f} {base_currency}")
+    
+    # Предупреждение об устаревших данных
+    if not ExchangeRateService.is_cache_valid():
+        print("\n⚠️ Внимание: данные о курсах устарели. Выполните 'update-rates' для обновления.")
 
 
 def buy_currency(currency: str, amount: float):
-    """Покупка валюты"""
+    """Покупка валюты через usecases с логированием"""
     if not user_manager.current_user:
         print("Сначала выполните login")
         return
 
     try:
-        portfolio = portfolio_manager.get_portfolio()
+        result = portfolio_manager.buy_currency(
+            user_manager.current_user.user_id, 
+            currency, 
+            amount
+        )
         
-        # Добавляем валюту если ее нет
-        if currency.upper() not in portfolio.wallets:
-            portfolio.add_currency(currency.upper())
+        # Расчет стоимости покупки
+        try:
+            rate = ExchangeRateService.get_rate(currency.upper(), 'USD')
+            cost_usd = amount * rate
+            cost_info = f"Оценочная стоимость: {cost_usd:.2f} USD (курс: {rate:.4f})"
+        except CurrencyNotFoundError:
+            cost_info = "Не удалось рассчитать стоимость (курс недоступен)"
         
-        wallet = portfolio.get_wallet(currency.upper())
-        wallet.deposit(amount)
-        
-        portfolio_manager.save_portfolio(portfolio)
-        
-        print(f"Покупка выполнена: {amount:.4f} {currency.upper()}")
-        print("Изменения в портфеле:")
-        print(f"- {currency.upper()}: стало {wallet.balance:.4f}")
+        print(f"✅ Покупка выполнена: {amount:.4f} {currency.upper()}")
+        print("💳 Изменения в портфеле:")
+        print(f"   - {currency.upper()}: было {result['old_balance']:.4f} → стало {result['new_balance']:.4f}")
+        print(f"💰 {cost_info}")
         
     except Exception as e:
-        print(f"Ошибка при покупке: {e}")
+        print(f"❌ Ошибка при покупке: {e}")
 
 
 def sell_currency(currency: str, amount: float):
-    """Продажа валюты"""
+    """Продажа валюты через usecases с логированием"""
     if not user_manager.current_user:
         print("Сначала выполните login")
         return
 
     try:
-        portfolio = portfolio_manager.get_portfolio()
-        wallet = portfolio.get_wallet(currency.upper())
+        result = portfolio_manager.sell_currency(
+            user_manager.current_user.user_id,
+            currency, 
+            amount
+        )
         
-        if not wallet:
-            print("У вас нет кошелька '{currency.upper()}'. "
-                  "Добавьте валюту: она создаётся автоматически при первой покупке.")
-            return
+        # Расчет выручки
+        try:
+            rate = ExchangeRateService.get_rate(currency.upper(), 'USD')
+            revenue_usd = amount * rate
+            revenue_info = f"Оценочная выручка: {revenue_usd:.2f} USD (курс: {rate:.4f})"
+        except CurrencyNotFoundError:
+            revenue_info = "Не удалось рассчитать выручку (курс недоступен)"
         
-        wallet.withdraw(amount)
-        portfolio_manager.save_portfolio(portfolio)
-        
-        print(f"Продажа выполнена: {amount:.4f} {currency.upper()}")
-        print("Изменения в портфеле:")
-        print(f"- {currency.upper()}: стало {wallet.balance:.4f}")
+        print(f"✅ Продажа выполнена: {amount:.4f} {currency.upper()}")
+        print("💳 Изменения в портфеле:")
+        print(f"   - {currency.upper()}: было {result['old_balance']:.4f} → стало {result['new_balance']:.4f}")
+        print(f"💰 {revenue_info}")
         
     except Exception as e:
-        print(f"Ошибка при продаже: {e}")
+        print(f"❌ Ошибка при продаже: {e}")
 
 
 def get_rate(from_currency: str, to_currency: str):
-    """Получение курса валюты"""
-    # Временная заглушка - будет заменена на реальные данные из API
-    exchange_rates = {
-        'BTC_USD': 59337.21,
-        'EUR_USD': 1.0786,
-        'USD_USD': 1.0,
-        'RUB_USD': 0.01016,
-        'ETH_USD': 3720.00
-    }
-    
-    rate_key = f"{from_currency.upper()}_{to_currency.upper()}"
-    
-    if rate_key in exchange_rates:
-        rate = exchange_rates[rate_key]
+    """Получение курса валюты с проверкой актуальности"""
+    try:
+        rate = ExchangeRateService.get_rate(from_currency, to_currency)
         reverse_rate = 1 / rate if rate != 0 else 0
-        print(f"Курс {from_currency.upper()}→{to_currency.upper()}: {rate:.6f}")
-        print(f"Обратный курс {to_currency.upper()}→{from_currency.upper()}: {reverse_rate:.6f}")
-    else:
-        print(f"Курс {from_currency.upper()}→{to_currency.upper()} недоступен. "
-              f"Повторите попытку позже.")
+        
+        print(f"📊 Курс {from_currency.upper()}→{to_currency.upper()}: {rate:.6f}")
+        print(f"🔄 Обратный курс {to_currency.upper()}→{from_currency.upper()}: {reverse_rate:.6f}")
+        
+        # Информация об актуальности данных
+        if not ExchangeRateService.is_cache_valid():
+            last_update = ExchangeRateService.get_last_refresh_time()
+            print(f"⚠️ Внимание: данные устарели. Последнее обновление: {last_update}")
+            print("   Выполните 'update-rates' для получения актуальных курсов.")
+        else:
+            print(f"✅ Данные актуальны (обновлено: {ExchangeRateService.get_last_refresh_time()})")
+            
+    except CurrencyNotFoundError as e:
+        print(f"❌ {e}")
+        print("💡 Попробуйте выполнить 'update-rates' для загрузки актуальных курсов.")
 
 
 def update_rates(source: str):
