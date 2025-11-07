@@ -1,0 +1,1 @@
+"""Parser service for fetching currency exchange rates"""

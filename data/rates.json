@@ -1,1 +1,55 @@
-{}
+{
+  "pairs": {
+    "BTC_USD": {
+      "rate": 103277,
+      "updated_at": "2025-11-07T20:14:08.029110+00:00",
+      "source": "CoinGecko"
+    },
+    "ETH_USD": {
+      "rate": 3444.96,
+      "updated_at": "2025-11-07T20:14:08.029110+00:00",
+      "source": "CoinGecko"
+    },
+    "SOL_USD": {
+      "rate": 163.78,
+      "updated_at": "2025-11-07T20:14:08.029110+00:00",
+      "source": "CoinGecko"
+    },
+    "ADA_USD": {
+      "rate": 0.580724,
+      "updated_at": "2025-11-07T20:14:08.029110+00:00",
+      "source": "CoinGecko"
+    },
+    "DOT_USD": {
+      "rate": 3.26,
+      "updated_at": "2025-11-07T20:14:08.029110+00:00",
+      "source": "CoinGecko"
+    },
+    "DOGE_USD": {
+      "rate": 0.180226,
+      "updated_at": "2025-11-07T20:14:08.029110+00:00",
+      "source": "CoinGecko"
+    },
+    "EUR_USD": {
+      "rate": 1.0786,
+      "updated_at": "2025-11-07T20:14:08.029110+00:00",
+      "source": "ExchangeRate-API"
+    },
+    "GBP_USD": {
+      "rate": 1.2593,
+      "updated_at": "2025-11-07T20:14:08.029110+00:00",
+      "source": "ExchangeRate-API"
+    },
+    "RUB_USD": {
+      "rate": 0.01016,
+      "updated_at": "2025-11-07T20:14:08.029110+00:00",
+      "source": "ExchangeRate-API"
+    },
+    "JPY_USD": {
+      "rate": 0.0067,
+      "updated_at": "2025-11-07T20:14:08.029110+00:00",
+      "source": "ExchangeRate-API"
+    }
+  },
+  "last_refresh": "2025-11-07T20:14:08.029110+00:00"
+}

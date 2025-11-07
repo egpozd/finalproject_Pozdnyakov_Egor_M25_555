@@ -1,5 +1,8 @@
 import argparse
+from prettytable import PrettyTable
 from valutatrade_hub.core.usecases import user_manager, portfolio_manager
+from valutatrade_hub.parser_service.updater import RatesUpdater
+from valutatrade_hub.parser_service.storage import storage
 
 
 def main():
@@ -35,6 +38,17 @@ def main():
     rate_parser.add_argument('--from', required=True, dest='from_currency', help='From currency')
     rate_parser.add_argument('--to', required=True, help='To currency')
 
+    # update-rates command
+    update_parser = subparsers.add_parser('update-rates', help='Update currency rates')
+    update_parser.add_argument('--source', choices=['coingecko', 'exchangerate', 'all'], 
+                              default='all', help='Data source to update from')
+
+    # show-rates command
+    show_rates_parser = subparsers.add_parser('show-rates', help='Show current rates')
+    show_rates_parser.add_argument('--currency', help='Filter by currency code')
+    show_rates_parser.add_argument('--top', type=int, help='Show top N currencies by rate')
+    show_rates_parser.add_argument('--base', default='USD', help='Base currency for display')
+
     args = parser.parse_args()
 
     if not args.command:
@@ -54,6 +68,10 @@ def main():
             sell_currency(args.currency, args.amount)
         elif args.command == 'get-rate':
             get_rate(args.from_currency, args.to)
+        elif args.command == 'update-rates':
+            update_rates(args.source)
+        elif args.command == 'show-rates':
+            show_rates(args.currency, args.top, args.base)
     except Exception as e:
         print(f"Ошибка: {e}")
 
@@ -144,8 +162,8 @@ def sell_currency(currency: str, amount: float):
         wallet = portfolio.get_wallet(currency.upper())
         
         if not wallet:
-            print(f"У вас нет кошелька '{currency.upper()}'. "
-                  f"Добавьте валюту: она создаётся автоматически при первой покупке.")
+            print("У вас нет кошелька '{currency.upper()}'. "
+                  "Добавьте валюту: она создаётся автоматически при первой покупке.")
             return
         
         wallet.withdraw(amount)
@@ -180,3 +198,97 @@ def get_rate(from_currency: str, to_currency: str):
     else:
         print(f"Курс {from_currency.upper()}→{to_currency.upper()} недоступен. "
               f"Повторите попытку позже.")
+
+
+def update_rates(source: str):
+    """Обновление курсов валют"""
+    sources_map = {
+        'all': ('coingecko', 'exchangerate'),
+        'coingecko': ('coingecko',),
+        'exchangerate': ('exchangerate',)
+    }
+    
+    selected_sources = sources_map.get(source, ('coingecko', 'exchangerate'))
+    
+    updater = RatesUpdater()
+    result = updater.run_update(selected_sources)
+    
+    if result['success']:
+        print("✅ Обновление завершено успешно!")
+        print(f"📊 Обновлено курсов: {result['rates_count']}")
+        print(f"⏱️ Время выполнения: {result['duration_ms']}ms")
+    else:
+        print("⚠️ Обновление завершено с ошибками")
+        print(f"📊 Обновлено курсов: {result['rates_count']}")
+        print("Ошибки:")
+        for error in result['errors']:
+            print(f"  - {error}")
+        print("Подробности смотрите в логах.")
+
+
+def show_rates(currency: str = None, top: int = None, base: str = 'USD'):
+    """Показать текущие курсы валют"""
+    data = storage.get_current_rates()
+    
+    if not data.get('pairs'):
+        print("Локальный кеш курсов пуст. Выполните 'update-rates', чтобы загрузить данные.")
+        return
+    
+    # Фильтруем пары по базовой валюте
+    relevant_pairs = {}
+    for pair, info in data['pairs'].items():
+        if pair.endswith(f"_{base}"):
+            relevant_pairs[pair] = info
+    
+    if not relevant_pairs:
+        print(f"Курсы для базовой валюты '{base}' не найдены в кеше.")
+        return
+    
+    # Фильтруем по валюте если указана
+    if currency:
+        currency = currency.upper()
+        filtered_pairs = {k: v for k, v in relevant_pairs.items() 
+                         if k.startswith(f"{currency}_") or k.endswith(f"_{currency}")}
+        if not filtered_pairs:
+            print(f"Курс для '{currency}' не найден в кеше.")
+            return
+        relevant_pairs = filtered_pairs
+    
+    # Сортируем по курсу (для top N)
+    sorted_pairs = sorted(relevant_pairs.items(), 
+                         key=lambda x: x[1]['rate'], 
+                         reverse=True)
+    
+    # Ограничиваем количество если указан top
+    if top:
+        sorted_pairs = sorted_pairs[:top]
+    
+    # Создаем таблицу
+    table = PrettyTable()
+    table.field_names = ["Пара", "Курс", "Обновлено", "Источник"]
+    table.align["Пара"] = "l"
+    table.align["Курс"] = "r"
+    
+    for pair, info in sorted_pairs:
+        # Форматируем время
+        updated_at = info['updated_at']
+        if 'T' in updated_at:
+            updated_at = updated_at.split('T')[1].split('.')[0]  # Берем только время
+        
+        table.add_row([
+            pair,
+            f"{info['rate']:,.4f}",
+            updated_at,
+            info['source']
+        ])
+    
+    print(f"Курсы из кеша (обновлено: {data['last_refresh']}):")
+    print(table)
+    
+    # Предупреждение если кэш устарел
+    if not storage.is_cache_valid():
+        print("\n⚠️ Внимание: данные в кеше устарели. Рекомендуется выполнить 'update-rates'.")
+
+
+if __name__ == '__main__':
+    main()

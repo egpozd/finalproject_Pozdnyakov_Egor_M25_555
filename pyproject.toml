@@ -7,11 +7,14 @@ readme = "README.md"
 packages = [{include = "valutatrade_hub"}]
 
 [tool.poetry.dependencies]
-python = "^3.8"
+python = "^3.9"
 prettytable = "^3.9.0"
+requests = "^2.32.5"
+python-dotenv = "^1.2.1"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.1.0"
+python-dotenv = "^1.2.1"
 
 [tool.poetry.scripts]
 wallet = "main:main"
